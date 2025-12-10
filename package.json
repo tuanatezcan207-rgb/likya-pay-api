@@ -1,0 +1,12 @@
+{
+  "name": "likyapay-api",
+  "version": "1.0.0",
+  "description": "Likya Pay Mahsuplaşma Algoritması API",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
