@@ -1,13 +1,13 @@
-// --- LIKYA PAY MAHSUPLAŞMA API ÇEKİRDEĞİ (NODE.JS + EXPRESS) ---
+// --- LIKYA PAY MAHSUPLAŞMA API ÇEKİRDEĞİ (NODE.JS + EXPRESS + VERCEL UYUMU) ---
 
 const express = require('express');
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 3000; // Vercel sunucusuz olduğu için bu port sadece yerel testler içindir
 
 // Middleware (Ara Yazılım): Gelen JSON verisini işleme
 app.use(express.json());
 
-// Basit CORS ayarı (Daha sonra Vercel bunu otomatik halledecektir)
+// Basit CORS ayarı (Gerektiğinde Vercel bunu otomatik halleder)
 app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
@@ -24,7 +24,6 @@ app.use((req, res, next) => {
  * @param {Array<Array>} iliskiler - Borç/alacak ilişkileri listesi: [Alacaklı, Borçlu, Miktar]
  */
 function mahsuplamaIsleminiBaslat(iliskiler) {
-    // 1. Veriyi Graph (Yönlü Çizge) Yapısına Dönüştürme
     const graph = {}; 
     iliskiler.forEach(([alacakli, borclu, miktar]) => {
         if (!graph[alacakli]) graph[alacakli] = [];
@@ -34,7 +33,6 @@ function mahsuplamaIsleminiBaslat(iliskiler) {
     const tumDonguler = [];
     const tumSirketler = new Set([...Object.keys(graph), ...iliskiler.map(i => i[1])]);
 
-    // 2. DFS (Derinlik Öncelikli Arama) ile döngü arama
     for (const baslangicSirket of tumSirketler) {
         const yol = [];
         const yoldakiMiktarlar = [];
@@ -42,12 +40,11 @@ function mahsuplamaIsleminiBaslat(iliskiler) {
         dfs(baslangicSirket, baslangicSirket, graph, yol, yoldakiMiktarlar, ziyaretEdildi, tumDonguler);
     }
     
-    // 3. Mahsuplaşma Sonuçlarını Hesaplama
     return hesaplaMahsuplasma(tumDonguler);
 }
 
 /**
- * DFS Yardımcı Fonksiyonu (Recursive). 
+ * DFS Yardımcı Fonksiyonu (Recursive).
  */
 function dfs(mevcutSirket, baslangicSirket, graph, yol, yoldakiMiktarlar, ziyaretEdildi, tumDonguler) {
     yol.push(mevcutSirket);
@@ -59,7 +56,6 @@ function dfs(mevcutSirket, baslangicSirket, graph, yol, yoldakiMiktarlar, ziyare
             const miktar = kenar.miktar;
 
             if (hedef === baslangicSirket && yol.length > 1) {
-                // *** DÖNGÜ BULUNDU! ***
                 const dongu = {
                     path: [...yol, hedef],
                     miktarlar: [...yoldakiMiktarlar, miktar]
@@ -71,7 +67,7 @@ function dfs(mevcutSirket, baslangicSirket, graph, yol, yoldakiMiktarlar, ziyare
             if (!ziyaretEdildi.has(hedef)) {
                 yoldakiMiktarlar.push(miktar);
                 dfs(hedef, baslangicSirket, graph, yol, yoldakiMiktarlar, ziyaretEdildi, tumDonguler);
-                yoldakiMiktarlar.pop(); // Geri izleme (Backtracking)
+                yoldakiMiktarlar.pop();
             }
         }
     }
@@ -89,10 +85,10 @@ function hesaplaMahsuplasma(donguler) {
     const rapor = [];
 
     for (const dongu of donguler) {
-        const mahsupMiktari = Math.min(...dongu.miktarlar); // En küçük miktar kuralı
+        const mahsupMiktari = Math.min(...dongu.miktarlar);
         
         if (mahsupMiktari > 0) {
-            toplamMahsupHacmi += mahsupMiktari * (dongu.path.length - 1); // Mahsup edilen hacim
+            toplamMahsupHacmi += mahsupMiktari * (dongu.path.length - 1);
             
             for (let i = 0; i < dongu.path.length - 1; i++) {
                 const alacakli = dongu.path[i];
@@ -119,9 +115,13 @@ function hesaplaMahsuplasma(donguler) {
 // II. API UÇ NOKTASI (ENDPOINT) TANIMLAMA
 // =================================================================
 
+// Ana Sayfa Uç Noktası (GET /)
+app.get('/', (req, res) => {
+    res.send('Likya Pay API çalışıyor. Mahsuplaşma için /api/v1/netting adresine POST isteği gönderin.');
+});
+
 /**
  * Ana Mahsuplaşma İşlemi Uç Noktası (POST /api/v1/netting)
- * Gelen Veri Örneği: { "iliskiler": [["A", "B", 1000], ["B", "C", 1000], ["C", "A", 1000]] }
  */
 app.post('/api/v1/netting', async (req, res) => {
     const borcIliskileri = req.body.iliskiler;
@@ -139,7 +139,7 @@ app.post('/api/v1/netting', async (req, res) => {
         return res.status(200).json({
             durum: "Başarılı",
             toplam_mahsup_hacmi: sonuc.toplamMahsupHacmi.toLocaleString('tr-TR'),
-            bulunan_donguler: sonuc.rapor.length / 3, // Basit döngü sayısı tahmini
+            bulunan_donguler: sonuc.rapor.length > 0 ? sonuc.rapor.length / 3 : 0,
             mahsuplama_raporu: sonuc.rapor
         });
 
@@ -149,14 +149,5 @@ app.post('/api/v1/netting', async (req, res) => {
     }
 });
 
-
-// 3. Ana Sayfa Uç Noktası (GET /)
-app.get('/', (req, res) => {
-    res.send('Likya Pay API çalışıyor. Mahsuplaşma için /api/v1/netting adresine POST isteği gönderin.');
-});
-
-
-// --- Sunucuyu Başlatma ---
-app.listen(PORT, () => {
-    console.log(`[Sunucu] Likya Pay API ${PORT} portunda dinleniyor.`);
-});
+// VERCEL UYUMU İÇİN ÖNEMLİ: app.listen() kullanılmaz. Uygulama modül olarak dışa aktarılır.
+module.exports = app;
