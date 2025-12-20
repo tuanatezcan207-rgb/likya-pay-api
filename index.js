@@ -1,8 +1,9 @@
 // --- LIKYA PAY MAHSUPLAŞMA API ÇEKİRDEĞİ (NODE.JS + EXPRESS + VERCEL UYUMU) ---
 
 const express = require('express');
+const path = require('path');
 const app = express();
-const PORT = 3000; // Vercel sunucusuz olduğu için bu port sadece yerel testler içindir
+const PORT = 3000;
 
 // Middleware (Ara Yazılım): Gelen JSON verisini işleme
 app.use(express.json());
@@ -14,6 +15,14 @@ app.use((req, res, next) => {
     next();
 });
 
+// Serve static files from the client directory
+app.use(express.static(path.join(__dirname, 'client'), {
+    setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.jsx')) {
+            res.setHeader('Content-Type', 'text/javascript'); // Changed from text/jsx to text/javascript or application/javascript
+        }
+    }
+}));
 
 // =================================================================
 // I. MAHSUPLAŞMA ALGORİTMASI ÇEKİRDEĞİ (GRAPH CYCLE FINDER)
@@ -115,9 +124,13 @@ function hesaplaMahsuplasma(donguler) {
 // II. API UÇ NOKTASI (ENDPOINT) TANIMLAMA
 // =================================================================
 
-// Ana Sayfa Uç Noktası (GET /)
-app.get('/', (req, res) => {
-    res.send('Likya Pay API çalışıyor. Mahsuplaşma için /api/v1/netting adresine POST isteği gönderin.');
+// Serve index.html for all other routes to support client-side routing
+app.get('*', (req, res) => {
+    // Check if request is for API
+    if (req.path.startsWith('/api')) {
+        return res.status(404).json({ error: 'Endpoint not found' });
+    }
+    res.sendFile(path.join(__dirname, 'client', 'index.html'));
 });
 
 /**
@@ -148,6 +161,13 @@ app.post('/api/v1/netting', async (req, res) => {
         return res.status(500).json({ error: "Sunucu içi kritik hata oluştu (Internal Server Error)." });
     }
 });
+
+// Start the server
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`Likya Pay API listening on port ${PORT}`);
+    });
+}
 
 // VERCEL UYUMU İÇİN ÖNEMLİ: app.listen() kullanılmaz. Uygulama modül olarak dışa aktarılır.
 module.exports = app;
